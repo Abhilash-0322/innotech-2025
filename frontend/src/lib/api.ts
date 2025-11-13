@@ -264,3 +264,160 @@ export class WebSocketClient {
     }
   }
 }
+
+// ============= ADVANCED FEATURES API =============
+
+// ML Predictions API
+export const mlAPI = {
+  getPredictions: async (hoursAhead: number = 12) => {
+    const response = await api.get(`/api/predictions/fire-risk?hours_ahead=${hoursAhead}`);
+    return response.data;
+  },
+  
+  trainModel: async () => {
+    const response = await api.post('/api/ml/train');
+    return response.data;
+  },
+  
+  getFeatureImportance: async () => {
+    const response = await api.get('/api/ml/feature-importance');
+    return response.data;
+  },
+};
+
+// Multi-Zone API
+export const zoneAPI = {
+  getAllZones: async () => {
+    const response = await api.get('/api/zones');
+    return response.data;
+  },
+  
+  getHeatmap: async () => {
+    const response = await api.get('/api/zones/heatmap');
+    return response.data;
+  },
+  
+  getComparison: async () => {
+    const response = await api.get('/api/zones/comparison');
+    return response.data;
+  },
+  
+  getFireSpread: async (zoneId: string) => {
+    const response = await api.get(`/api/zones/${zoneId}/fire-spread`);
+    return response.data;
+  },
+  
+  activateSprinklers: async (zoneId: string) => {
+    const response = await api.post(`/api/zones/${zoneId}/activate-sprinklers`);
+    return response.data;
+  },
+  
+  getAllNodes: async () => {
+    const response = await api.get('/api/nodes');
+    return response.data;
+  },
+  
+  registerNode: async (nodeData: any) => {
+    const response = await api.post('/api/nodes/register', nodeData);
+    return response.data;
+  },
+};
+
+// External Data API
+export const externalAPI = {
+  getLocation: async () => {
+    const response = await api.get('/api/external/location');
+    return response.data;
+  },
+  
+  getCurrentWeather: async (latitude?: number, longitude?: number) => {
+    const params = new URLSearchParams();
+    if (latitude) params.append('latitude', latitude.toString());
+    if (longitude) params.append('longitude', longitude.toString());
+    const response = await api.get(`/api/weather/current?${params.toString()}`);
+    return response.data;
+  },
+  
+  getForecast: async (latitude?: number, longitude?: number, days: number = 3) => {
+    const params = new URLSearchParams();
+    if (latitude) params.append('latitude', latitude.toString());
+    if (longitude) params.append('longitude', longitude.toString());
+    params.append('days', days.toString());
+    const response = await api.get(`/api/weather/forecast?${params.toString()}`);
+    return response.data;
+  },
+  
+  getFireHotspots: async (latitude?: number, longitude?: number, radiusKm: number = 50) => {
+    const params = new URLSearchParams();
+    if (latitude) params.append('latitude', latitude.toString());
+    if (longitude) params.append('longitude', longitude.toString());
+    params.append('radius_km', radiusKm.toString());
+    const response = await api.get(`/api/satellite/fire-hotspots?${params.toString()}`);
+    return response.data;
+  },
+  
+  getEnhancedRisk: async () => {
+    const response = await api.post('/api/analysis/enhanced-risk');
+    return response.data;
+  },
+};
+
+// Analytics API
+export const analyticsAPI = {
+  getTrends: async (metric: string = 'temperature') => {
+    const response = await api.get(`/api/analytics/trends?metric=${metric}`);
+    return response.data;
+  },
+  
+  getPatterns: async () => {
+    const response = await api.get('/api/analytics/patterns');
+    return response.data;
+  },
+  
+  getInsights: async () => {
+    const response = await api.get('/api/analytics/insights');
+    return response.data;
+  },
+  
+  getForecast: async () => {
+    const response = await api.get('/api/analytics/forecast');
+    return response.data;
+  },
+  
+  getHistoricalComparison: async (daysBack: number = 7) => {
+    const response = await api.get(`/api/analytics/historical-comparison?days_back=${daysBack}`);
+    return response.data;
+  },
+};
+
+// Smart Alerts API (Advanced)
+export const smartAlertsAPI = {
+  getActiveAlerts: async (priority?: string) => {
+    const params = priority ? `?priority=${priority}` : '';
+    const response = await api.get(`/api/alerts/active${params}`);
+    return response.data;
+  },
+  
+  acknowledgeAlert: async (alertId: string) => {
+    const response = await api.post(`/api/alerts/${alertId}/acknowledge`);
+    return response.data;
+  },
+  
+  resolveAlert: async (alertId: string) => {
+    const response = await api.post(`/api/alerts/${alertId}/resolve`);
+    return response.data;
+  },
+  
+  getStatistics: async () => {
+    const response = await api.get('/api/alerts/statistics');
+    return response.data;
+  },
+};
+
+// System Health API
+export const systemAPI = {
+  getHealth: async () => {
+    const response = await api.get('/api/system/health');
+    return response.data;
+  },
+};

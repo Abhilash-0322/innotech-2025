@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
-import { Flame, Activity, Database, AlertTriangle, Droplets, LogOut, Brain, FileText } from 'lucide-react';
+import { Flame, Activity, Database, AlertTriangle, Droplets, LogOut, Brain, FileText, TrendingUp, Map, Satellite, Bell, Settings } from 'lucide-react';
 import LiveSensorData from '@/components/LiveSensorData';
 import HistoricalData from '@/components/HistoricalData';
 import AlertsPanel from '@/components/AlertsPanel';
@@ -11,8 +11,14 @@ import SprinklerControl from '@/components/SprinklerControl';
 import AIResponsesViewer from '@/components/AIResponsesViewer';
 import SensorRecordsViewer from '@/components/SensorRecordsViewer';
 import AIRecommendationsSidebar from '@/components/AIRecommendationsSidebar';
+import MLPredictions from '@/components/MLPredictions';
+import MultiZoneHeatmap from '@/components/MultiZoneHeatmap';
+import AdvancedAnalytics from '@/components/AdvancedAnalytics';
+import WeatherSatellite from '@/components/WeatherSatellite';
+import EnhancedAlertsPanel from '@/components/EnhancedAlertsPanel';
+import SystemHealthMonitor from '@/components/SystemHealthMonitor';
 
-type TabType = 'live' | 'history' | 'records' | 'ai' | 'alerts' | 'sprinkler';
+type TabType = 'live' | 'ml-predictions' | 'multi-zone' | 'analytics' | 'weather' | 'history' | 'records' | 'ai' | 'alerts' | 'smart-alerts' | 'sprinkler' | 'system';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -35,12 +41,18 @@ export default function DashboardPage() {
   };
 
   const tabs = [
-    { id: 'live' as TabType, name: 'Live Data', icon: Activity, color: 'text-green-600' },
-    { id: 'history' as TabType, name: 'Historical Charts', icon: Database, color: 'text-blue-600' },
-    { id: 'records' as TabType, name: 'All Records', icon: FileText, color: 'text-indigo-600' },
-    { id: 'ai' as TabType, name: 'AI Responses', icon: Brain, color: 'text-purple-600' },
-    { id: 'alerts' as TabType, name: 'Alerts', icon: AlertTriangle, color: 'text-orange-600' },
-    { id: 'sprinkler' as TabType, name: 'Sprinkler Control', icon: Droplets, color: 'text-cyan-600' },
+    { id: 'live' as TabType, name: 'Live Data', icon: Activity, color: 'text-green-600', category: 'Core' },
+    { id: 'ml-predictions' as TabType, name: 'ML Predictions', icon: Brain, color: 'text-purple-600', category: 'AI' },
+    { id: 'multi-zone' as TabType, name: 'Multi-Zone', icon: Map, color: 'text-blue-600', category: 'AI' },
+    { id: 'analytics' as TabType, name: 'Analytics', icon: TrendingUp, color: 'text-indigo-600', category: 'AI' },
+    { id: 'weather' as TabType, name: 'Weather & Satellite', icon: Satellite, color: 'text-cyan-600', category: 'AI' },
+    { id: 'history' as TabType, name: 'Historical Charts', icon: Database, color: 'text-blue-600', category: 'Core' },
+    { id: 'records' as TabType, name: 'All Records', icon: FileText, color: 'text-gray-600', category: 'Core' },
+    { id: 'ai' as TabType, name: 'AI Responses', icon: Brain, color: 'text-purple-500', category: 'Core' },
+    { id: 'alerts' as TabType, name: 'Basic Alerts', icon: AlertTriangle, color: 'text-orange-600', category: 'Core' },
+    { id: 'smart-alerts' as TabType, name: 'Smart Alerts', icon: Bell, color: 'text-red-600', category: 'AI' },
+    { id: 'sprinkler' as TabType, name: 'Sprinkler', icon: Droplets, color: 'text-cyan-500', category: 'Control' },
+    { id: 'system' as TabType, name: 'System Health', icon: Settings, color: 'text-gray-700', category: 'Control' },
   ];
 
   if (!isHydrated || !isAuthenticated) {
@@ -59,7 +71,7 @@ export default function DashboardPage() {
                 <h1 className="text-2xl font-bold text-gray-900">
                   Smart Forest Fire Prevention System
                 </h1>
-                <p className="text-sm text-gray-600">Real-time monitoring & AI-powered alerts</p>
+                <p className="text-sm text-gray-600">AI-Powered Multi-Zone Forest Protection with ML Predictions</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -79,30 +91,35 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Tabs Navigation */}
+      {/* Tabs Navigation with Categories */}
       <div className="bg-white shadow-sm border-b border-gray-200">
-        <nav className="flex w-full">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`
-                  flex-1 flex items-center justify-center space-x-2 px-6 py-4 border-b-2 font-medium text-sm transition
-                  ${
-                    activeTab === tab.id
-                      ? `border-orange-500 ${tab.color} bg-orange-50`
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
-                  }
-                `}
-              >
-                <Icon className="w-5 h-5" />
-                <span>{tab.name}</span>
-              </button>
-            );
-          })}
-        </nav>
+        <div className="overflow-x-auto">
+          <nav className="flex min-w-max">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`
+                    flex items-center space-x-2 px-4 py-3 border-b-2 font-medium text-xs transition whitespace-nowrap
+                    ${
+                      activeTab === tab.id
+                        ? `border-orange-500 ${tab.color} bg-orange-50`
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                    }
+                  `}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{tab.name}</span>
+                  {tab.category === 'AI' && (
+                    <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded">AI</span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
       </div>
 
       {/* Tab Content */}
@@ -111,11 +128,17 @@ export default function DashboardPage() {
           {/* Main Content Area */}
           <div className="lg:col-span-2">
             {activeTab === 'live' && <LiveSensorData />}
+            {activeTab === 'ml-predictions' && <MLPredictions />}
+            {activeTab === 'multi-zone' && <MultiZoneHeatmap />}
+            {activeTab === 'analytics' && <AdvancedAnalytics />}
+            {activeTab === 'weather' && <WeatherSatellite />}
             {activeTab === 'history' && <HistoricalData />}
             {activeTab === 'records' && <SensorRecordsViewer />}
             {activeTab === 'ai' && <AIResponsesViewer />}
             {activeTab === 'alerts' && <AlertsPanel />}
+            {activeTab === 'smart-alerts' && <EnhancedAlertsPanel />}
             {activeTab === 'sprinkler' && <SprinklerControl />}
+            {activeTab === 'system' && <SystemHealthMonitor />}
           </div>
 
           {/* AI Recommendations Sidebar */}

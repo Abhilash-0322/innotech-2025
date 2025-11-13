@@ -14,6 +14,9 @@ from config import settings
 from database import get_database, connect_to_mongo
 from models import SensorData, Alert, AlertStatus, RiskLevel, SprinklerStatus
 from ai_agent import fire_risk_agent
+from analytics_engine import analytics_engine
+from smart_alerts import alert_system
+from multi_zone_manager import zone_manager
 from bson import ObjectId
 
 
@@ -64,6 +67,9 @@ class SensorDataIngestion:
             sensor_dict = sensor_data.dict()
             sensor_dict["fire_risk_score"] = analysis.risk_score
             sensor_dict["risk_level"] = analysis.risk_level
+            sensor_dict["reasoning"] = analysis.reasoning
+            sensor_dict["recommendations"] = analysis.recommendations
+            sensor_dict["should_activate_sprinkler"] = analysis.should_activate_sprinkler
             
             result = await self.db.sensor_data.insert_one(sensor_dict)
             sensor_id = str(result.inserted_id)
@@ -72,6 +78,41 @@ class SensorDataIngestion:
             analysis_dict = analysis.dict()
             analysis_dict["sensor_data_id"] = sensor_id
             await self.db.risk_analysis.insert_one(analysis_dict)
+            
+            # === NEW: Add to analytics engine ===
+            analytics_engine.add_data_point(
+                sensor_data.timestamp,
+                {
+                    'temperature': sensor_data.temperature,
+                    'humidity': sensor_data.humidity,
+                    'smoke_level': sensor_data.smoke_level,
+                    'rain_level': sensor_data.rain_level,
+                    'fire_risk_score': analysis.risk_score
+                }
+            )
+            
+            # === NEW: Update multi-zone manager ===
+            # Assuming we're using a default node for now
+            node_id = "NODE_001"
+            zone_manager.update_node_data(node_id, {
+                'temperature': sensor_data.temperature,
+                'humidity': sensor_data.humidity,
+                'smoke_level': sensor_data.smoke_level,
+                'rain_level': sensor_data.rain_level,
+                'fire_risk_score': analysis.risk_score
+            })
+            
+            # === NEW: Smart alert evaluation ===
+            triggered_alerts = await alert_system.evaluate_rules({
+                'fire_risk_score': analysis.risk_score,
+                'temperature': sensor_data.temperature,
+                'humidity': sensor_data.humidity,
+                'smoke_level': sensor_data.smoke_level,
+                'rain_level': sensor_data.rain_level
+            })
+            
+            for alert in triggered_alerts:
+                print(f"🚨 Smart Alert: {alert.title} [{alert.priority.value.upper()}]")
             
             # Handle alerts
             await self.handle_alerts(sensor_data, analysis)
@@ -84,6 +125,8 @@ class SensorDataIngestion:
             
         except Exception as e:
             print(f"⚠️ Error processing sensor data: {e}")
+            import traceback
+            traceback.print_exc()
     
     async def handle_alerts(self, sensor_data: SensorData, analysis):
         """Create alerts based on risk analysis"""

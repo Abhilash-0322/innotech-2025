@@ -12,7 +12,9 @@ from routes_alerts import router as alerts_router
 from routes_sprinkler import router as sprinkler_router
 from routes_dashboard import router as dashboard_router
 from routes_export import router as export_router
+from routes_advanced import router as advanced_router
 from config import settings
+from ml_predictor import predictor
 
 
 # WebSocket connection manager
@@ -53,6 +55,58 @@ manager = ConnectionManager()
 async def lifespan(app: FastAPI):
     # Startup
     await connect_to_mongo()
+    
+    # Auto-train ML model if data exists
+    try:
+        print("\n" + "="*60)
+        print("🤖 Checking ML Model Status...")
+        print("="*60)
+        
+        if not predictor.is_trained:
+            print("⚠️ ML model not trained. Attempting auto-training...")
+            db = get_database()
+            sensor_count = await db.sensor_data.count_documents({})
+            
+            if sensor_count >= 100:
+                print(f"📊 Found {sensor_count} sensor readings. Training model...")
+                
+                # Get training data
+                sensor_data = await db.sensor_data.find().sort("timestamp", -1).limit(10000).to_list(10000)
+                
+                sensor_history = [
+                    {
+                        'temperature': s.get('temperature', 25),
+                        'humidity': s.get('humidity', 50),
+                        'smoke_level': s.get('smoke_level', 0),
+                        'rain_level': s.get('rain_level', 0),
+                        'timestamp': s.get('timestamp')
+                    }
+                    for s in sensor_data
+                ]
+                
+                risk_scores = [s.get('fire_risk_score', 30) for s in sensor_data]
+                risk_levels = [s.get('risk_level', 'low') for s in sensor_data]
+                
+                # Train the model
+                success = predictor.train(sensor_history, risk_scores, risk_levels)
+                
+                if success:
+                    print("✅ ML model trained successfully on startup!")
+                    print(f"   Training samples: {len(sensor_history)}")
+                else:
+                    print("❌ ML model training failed")
+            else:
+                print(f"⚠️ Not enough data to train ({sensor_count}/100 samples)")
+                print("   Using mock predictions until sufficient data is collected")
+        else:
+            print("✅ ML model already trained and loaded")
+            print(f"   Model path: {predictor.model_path}")
+        
+        print("="*60 + "\n")
+    except Exception as e:
+        print(f"❌ Error during ML model initialization: {e}")
+        print("   Continuing with mock predictions...")
+    
     yield
     # Shutdown
     await close_mongo_connection()
@@ -82,6 +136,7 @@ app.include_router(alerts_router)
 app.include_router(sprinkler_router)
 app.include_router(dashboard_router)
 app.include_router(export_router)
+app.include_router(advanced_router)  # New advanced features
 
 
 @app.get("/")

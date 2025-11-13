@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # AI Analysis Settings
     ai_analysis_interval: int = 30  # Run AI every N seconds (30-60 recommended)
     
+    # External Data Integration
+    openweather_api_key: Optional[str] = None
+    forest_latitude: float = 28.6139  # Default: Delhi
+    forest_longitude: float = 77.2090  # Default: Delhi
+    forest_location_name: str = "Delhi NCR Region"
+    
     # System Thresholds
     fire_risk_threshold: float = 70.0
     high_smoke_threshold: float = 100.0

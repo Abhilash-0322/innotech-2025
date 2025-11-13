@@ -10,6 +10,7 @@ import asyncio
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from config import settings
 
 
 class AlertPriority(str, Enum):
@@ -63,17 +64,25 @@ class SmartAlertSystem:
         self.alert_history: List[AlertMessage] = []
         self.last_alert_time: Dict[str, datetime] = {}
         
-        # Email configuration (configure in settings)
-        self.smtp_host = "smtp.gmail.com"
-        self.smtp_port = 587
-        self.smtp_username = None  # Set from environment
-        self.smtp_password = None
-        self.from_email = "forest-fire-alert@example.com"
+        # Email configuration from settings
+        self.smtp_host = settings.smtp_host
+        self.smtp_port = settings.smtp_port
+        self.smtp_username = settings.smtp_username
+        self.smtp_password = settings.smtp_password
+        self.from_email = "forest-fire-alert@system.com"
         
-        # Recipient lists
-        self.email_recipients = []
-        self.sms_recipients = []
+        # SMS/Twilio configuration from settings
+        self.twilio_account_sid = settings.twilio_account_sid
+        self.twilio_auth_token = settings.twilio_auth_token
+        self.twilio_phone_number = settings.twilio_phone_number
+        
+        # Parse recipient lists from comma-separated strings
+        self.email_recipients = [e.strip() for e in settings.email_recipients.split(',') if e.strip()]
+        self.sms_recipients = [s.strip() for s in settings.sms_recipients.split(',') if s.strip()]
         self.webhook_urls = []
+        
+        print(f"📧 Email recipients configured: {len(self.email_recipients)}")
+        print(f"📱 SMS recipients configured: {len(self.sms_recipients)}")
     
     def _init_default_rules(self) -> List[AlertRule]:
         """Initialize default alert rules"""
@@ -330,18 +339,73 @@ class SmartAlertSystem:
     
     async def _send_sms(self, alert: AlertMessage):
         """
-        Send SMS notification (via Twilio or similar)
-        Placeholder implementation
+        Send SMS notification via Twilio
         """
-        print(f"📱 SMS: [{alert.priority.value.upper()}] {alert.title}")
-        # In production, integrate with Twilio:
-        # from twilio.rest import Client
-        # client = Client(account_sid, auth_token)
-        # message = client.messages.create(
-        #     body=f"[{alert.priority.value.upper()}] {alert.title}: {alert.message[:100]}",
-        #     from_=twilio_number,
-        #     to=recipient_number
-        # )
+        if not self.twilio_account_sid or not self.twilio_auth_token or not self.twilio_phone_number:
+            print("⚠️ SMS not configured: Missing Twilio credentials")
+            return
+        
+        if not self.sms_recipients:
+            print("⚠️ No SMS recipients configured")
+            return
+        
+        try:
+            from twilio.rest import Client
+            
+            # Initialize Twilio client
+            client = Client(self.twilio_account_sid, self.twilio_auth_token)
+            
+            # Create short SMS message (SMS has 160 char limit for best compatibility)
+            priority_emoji = {
+                AlertPriority.LOW: "ℹ️",
+                AlertPriority.MEDIUM: "⚠️",
+                AlertPriority.HIGH: "🔥",
+                AlertPriority.CRITICAL: "🚨"
+            }
+            
+            emoji = priority_emoji.get(alert.priority, "⚠️")
+            
+            # Construct concise message
+            risk_score = alert.data.get('fire_risk_score', 0)
+            temp = alert.data.get('temperature', 0)
+            smoke = alert.data.get('smoke_level', 0)
+            
+            sms_body = (
+                f"{emoji} FIRE ALERT: {alert.title}\n"
+                f"Risk: {risk_score:.0f}% | Temp: {temp:.1f}°C | Smoke: {smoke:.0f}\n"
+                f"Time: {alert.timestamp.strftime('%H:%M:%S')}\n"
+                f"ID: {alert.alert_id}"
+            )
+            
+            # Send to all recipients
+            sent_count = 0
+            failed_count = 0
+            
+            for recipient in self.sms_recipients:
+                try:
+                    message = client.messages.create(
+                        body=sms_body,
+                        from_=self.twilio_phone_number,
+                        to=recipient
+                    )
+                    
+                    if message.sid:
+                        print(f"✅ SMS sent to {recipient} (SID: {message.sid})")
+                        sent_count += 1
+                    else:
+                        print(f"⚠️ SMS failed for {recipient}")
+                        failed_count += 1
+                        
+                except Exception as recipient_error:
+                    print(f"❌ Failed to send SMS to {recipient}: {recipient_error}")
+                    failed_count += 1
+            
+            print(f"📱 SMS Alert Summary: {sent_count} sent, {failed_count} failed")
+        
+        except ImportError:
+            print("❌ Twilio library not installed. Run: pip install twilio")
+        except Exception as e:
+            print(f"❌ Failed to send SMS: {e}")
     
     async def _send_push_notification(self, alert: AlertMessage):
         """

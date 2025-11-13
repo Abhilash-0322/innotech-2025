@@ -13,6 +13,7 @@ from routes_sprinkler import router as sprinkler_router
 from routes_dashboard import router as dashboard_router
 from routes_export import router as export_router
 from routes_advanced import router as advanced_router
+from routes_sms import router as sms_router
 from config import settings
 from ml_predictor import predictor
 
@@ -137,6 +138,7 @@ app.include_router(sprinkler_router)
 app.include_router(dashboard_router)
 app.include_router(export_router)
 app.include_router(advanced_router)  # New advanced features
+app.include_router(sms_router)  # SMS notification management
 
 
 @app.get("/")

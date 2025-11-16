@@ -11,6 +11,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from config import settings
+from database import get_database
 
 
 class AlertPriority(str, Enum):
@@ -81,8 +82,14 @@ class SmartAlertSystem:
         self.sms_recipients = [s.strip() for s in settings.sms_recipients.split(',') if s.strip()]
         self.webhook_urls = []
         
+        # Get SMS thresholds from settings
+        self.sms_risk_threshold = settings.sms_risk_threshold
+        self.sms_smoke_threshold = settings.sms_smoke_threshold
+        
         print(f"📧 Email recipients configured: {len(self.email_recipients)}")
         print(f"📱 SMS recipients configured: {len(self.sms_recipients)}")
+        print(f"🔥 SMS risk threshold: {self.sms_risk_threshold}%")
+        print(f"💨 SMS smoke threshold: {self.sms_smoke_threshold}")
     
     def _init_default_rules(self) -> List[AlertRule]:
         """Initialize default alert rules"""
@@ -90,7 +97,7 @@ class SmartAlertSystem:
             AlertRule(
                 rule_id="critical_risk",
                 name="Critical Fire Risk",
-                condition="risk_score >= 75",
+                condition=f"risk_score >= {settings.sms_risk_threshold}",
                 priority=AlertPriority.CRITICAL,
                 channels=[NotificationChannel.EMAIL, NotificationChannel.SMS, 
                          NotificationChannel.PUSH, NotificationChannel.SIREN,
@@ -109,7 +116,7 @@ class SmartAlertSystem:
             AlertRule(
                 rule_id="smoke_detected",
                 name="Smoke Detection",
-                condition="smoke_level > 2500",
+                condition=f"smoke_level >= {settings.sms_smoke_threshold}",
                 priority=AlertPriority.HIGH,
                 channels=[NotificationChannel.EMAIL, NotificationChannel.SMS,
                          NotificationChannel.DASHBOARD],
@@ -157,22 +164,35 @@ class SmartAlertSystem:
         """
         triggered_alerts = []
         
+        print(f"\n🔍 Evaluating {len(self.alert_rules)} alert rules...")
+        print(f"   Sensor data: risk_score={sensor_data.get('fire_risk_score', 0)}, "
+              f"temp={sensor_data.get('temperature', 0)}, "
+              f"smoke={sensor_data.get('smoke_level', 0)}")
+        
         for rule in self.alert_rules:
             if not rule.enabled:
+                print(f"   ⏭️  Rule '{rule.name}' is disabled, skipping")
                 continue
             
             # Check cooldown
             if rule.rule_id in self.last_alert_time:
                 time_since_last = datetime.utcnow() - self.last_alert_time[rule.rule_id]
                 if time_since_last.total_seconds() < rule.cooldown_minutes * 60:
+                    remaining = rule.cooldown_minutes * 60 - time_since_last.total_seconds()
+                    print(f"   ⏱️  Rule '{rule.name}' in cooldown ({remaining:.0f}s remaining)")
                     continue
             
             # Evaluate condition
+            print(f"   📋 Evaluating rule '{rule.name}': {rule.condition}")
             if self._evaluate_condition(rule.condition, sensor_data):
+                print(f"   ✅ Rule '{rule.name}' TRIGGERED!")
                 alert = await self._create_alert(rule, sensor_data)
                 triggered_alerts.append(alert)
                 self.last_alert_time[rule.rule_id] = datetime.utcnow()
+            else:
+                print(f"   ❌ Rule '{rule.name}' not triggered")
         
+        print(f"📊 Total alerts triggered: {len(triggered_alerts)}\n")
         return triggered_alerts
     
     def _evaluate_condition(self, condition: str, data: Dict) -> bool:
@@ -339,21 +359,33 @@ class SmartAlertSystem:
     
     async def _send_sms(self, alert: AlertMessage):
         """
-        Send SMS notification via Twilio
+        Send SMS notification via Twilio with recent sensor history
         """
+        print(f"\n📱 Attempting to send SMS for alert: {alert.alert_id}")
+        print(f"   Priority: {alert.priority.value}")
+        print(f"   Title: {alert.title}")
+        
         if not self.twilio_account_sid or not self.twilio_auth_token or not self.twilio_phone_number:
             print("⚠️ SMS not configured: Missing Twilio credentials")
+            print(f"   Account SID: {'✓' if self.twilio_account_sid else '✗'}")
+            print(f"   Auth Token: {'✓' if self.twilio_auth_token else '✗'}")
+            print(f"   Phone Number: {'✓' if self.twilio_phone_number else '✗'}")
             return
         
         if not self.sms_recipients:
             print("⚠️ No SMS recipients configured")
             return
         
+        print(f"   Recipients: {len(self.sms_recipients)} - {self.sms_recipients}")
+        
         try:
             from twilio.rest import Client
             
             # Initialize Twilio client
             client = Client(self.twilio_account_sid, self.twilio_auth_token)
+            
+            # Fetch recent sensor history
+            history = await self._fetch_recent_sensor_history(limit=3)
             
             # Create short SMS message (SMS has 160 char limit for best compatibility)
             priority_emoji = {
@@ -365,17 +397,35 @@ class SmartAlertSystem:
             
             emoji = priority_emoji.get(alert.priority, "⚠️")
             
-            # Construct concise message
+            # Current values
             risk_score = alert.data.get('fire_risk_score', 0)
             temp = alert.data.get('temperature', 0)
             smoke = alert.data.get('smoke_level', 0)
             
+            # Build SMS with historical trend
             sms_body = (
                 f"{emoji} FIRE ALERT: {alert.title}\n"
-                f"Risk: {risk_score:.0f}% | Temp: {temp:.1f}°C | Smoke: {smoke:.0f}\n"
-                f"Time: {alert.timestamp.strftime('%H:%M:%S')}\n"
-                f"ID: {alert.alert_id}"
+                f"CURRENT: Risk:{risk_score:.0f}% Temp:{temp:.1f}°C Smoke:{smoke:.0f}\n"
             )
+            
+            # Add trend data if available
+            if history and len(history) >= 2:
+                # Show last 2-3 readings for trend
+                sms_body += "TREND:\n"
+                for i, reading in enumerate(history[:3], 1):
+                    ts = reading.get('timestamp', datetime.utcnow())
+                    if isinstance(ts, datetime):
+                        time_str = ts.strftime('%H:%M')
+                    else:
+                        time_str = "??:??"
+                    
+                    r = reading.get('fire_risk_score', 0)
+                    s = reading.get('smoke_level', 0)
+                    sms_body += f"{time_str} R:{r:.0f}% S:{s:.0f}\n"
+            
+            sms_body += f"Time: {alert.timestamp.strftime('%H:%M:%S')}"
+            
+            print(f"📝 SMS Body ({len(sms_body)} chars):\n{sms_body}")
             
             # Send to all recipients
             sent_count = 0
@@ -406,6 +456,37 @@ class SmartAlertSystem:
             print("❌ Twilio library not installed. Run: pip install twilio")
         except Exception as e:
             print(f"❌ Failed to send SMS: {e}")
+    
+    async def _fetch_recent_sensor_history(self, limit: int = 3) -> List[Dict]:
+        """
+        Fetch recent sensor readings from database
+        Returns list of recent sensor data for trend analysis
+        """
+        try:
+            db = get_database()
+            if db is None:
+                print("⚠️ Database not available for historical data")
+                return []
+            
+            # Fetch most recent readings
+            cursor = db.sensor_data.find().sort("timestamp", -1).limit(limit)
+            history = []
+            
+            async for doc in cursor:
+                history.append({
+                    'timestamp': doc.get('timestamp'),
+                    'temperature': doc.get('temperature', 0),
+                    'smoke_level': doc.get('smoke_level', 0),
+                    'fire_risk_score': doc.get('fire_risk_score', 0),
+                    'humidity': doc.get('humidity', 0)
+                })
+            
+            print(f"📊 Fetched {len(history)} recent sensor readings")
+            return history
+            
+        except Exception as e:
+            print(f"❌ Error fetching sensor history: {e}")
+            return []
     
     async def _send_push_notification(self, alert: AlertMessage):
         """

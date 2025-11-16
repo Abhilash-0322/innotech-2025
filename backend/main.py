@@ -14,8 +14,11 @@ from routes_dashboard import router as dashboard_router
 from routes_export import router as export_router
 from routes_advanced import router as advanced_router
 from routes_sms import router as sms_router
+from routes_alert_monitor import router as alert_monitor_router
 from config import settings
 from ml_predictor import predictor
+from alert_monitor import alert_monitor
+import asyncio
 
 
 # WebSocket connection manager
@@ -56,6 +59,10 @@ manager = ConnectionManager()
 async def lifespan(app: FastAPI):
     # Startup
     await connect_to_mongo()
+    
+    # Start the database alert monitor in background
+    monitor_task = asyncio.create_task(alert_monitor.start())
+    print("✅ Database Alert Monitor started in background")
     
     # Auto-train ML model if data exists
     try:
@@ -109,8 +116,13 @@ async def lifespan(app: FastAPI):
         print("   Continuing with mock predictions...")
     
     yield
+    
     # Shutdown
+    print("\n🛑 Shutting down services...")
+    await alert_monitor.stop()
+    monitor_task.cancel()
     await close_mongo_connection()
+    print("👋 All services stopped")
 
 
 # Create FastAPI app
@@ -139,6 +151,7 @@ app.include_router(dashboard_router)
 app.include_router(export_router)
 app.include_router(advanced_router)  # New advanced features
 app.include_router(sms_router)  # SMS notification management
+app.include_router(alert_monitor_router)  # Database alert monitoring
 
 
 @app.get("/")

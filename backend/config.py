@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     high_temp_threshold: float = 35.0
     low_humidity_threshold: float = 30.0
     sms_risk_threshold: float = 75.0  # Send SMS when risk >= this value
+    sms_smoke_threshold: float = 2500.0  # Send SMS when smoke level >= this value
     
     # CORS
     frontend_url: str = "http://localhost:3000"
